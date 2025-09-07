@@ -11,13 +11,15 @@ const SplineBackground: React.FC = () => {
   const splineAppRef = useRef<any>(null);
 
   useEffect(() => {
-    let scriptLoaded = false;
+    console.log('SplineBackground: Starting initialization...');
 
     const loadSplineScript = async () => {
+      console.log('SplineBackground: Loading Spline script...');
+      
       // Check if script is already loaded
       if (document.querySelector('script[src*="spline-viewer"]')) {
-        scriptLoaded = true;
-        initializeSpline();
+        console.log('SplineBackground: Script already exists, initializing...');
+        setTimeout(initializeSpline, 500);
         return;
       }
 
@@ -27,23 +29,64 @@ const SplineBackground: React.FC = () => {
       script.src = 'https://unpkg.com/@splinetool/viewer@1.10.56/build/spline-viewer.js';
       
       script.onload = () => {
-        scriptLoaded = true;
-        setTimeout(initializeSpline, 100); // Small delay to ensure Spline is ready
+        console.log('SplineBackground: Script loaded successfully');
+        setTimeout(initializeSpline, 1000);
+      };
+      
+      script.onerror = (error) => {
+        console.error('SplineBackground: Failed to load script', error);
       };
       
       document.head.appendChild(script);
     };
 
     const initializeSpline = () => {
-      if (!splineViewerRef.current) return;
+      console.log('SplineBackground: Initializing Spline viewer...');
+      
+      if (!splineViewerRef.current) {
+        console.log('SplineBackground: Viewer ref not available yet, retrying...');
+        setTimeout(initializeSpline, 500);
+        return;
+      }
 
-      // Wait for the spline-viewer element to be ready
+      // Multiple attempts to connect to Spline
+      let attemptCount = 0;
+      const maxAttempts = 20;
+      
       const checkSplineReady = () => {
-        if (splineViewerRef.current && splineViewerRef.current.spline) {
-          splineAppRef.current = splineViewerRef.current.spline;
-          setupScrollHandler();
+        attemptCount++;
+        console.log(`SplineBackground: Attempt ${attemptCount} to connect to Spline...`);
+        
+        if (splineViewerRef.current) {
+          console.log('SplineBackground: Viewer element found:', splineViewerRef.current);
+          
+          // Try multiple ways to access the Spline application
+          const splineApp = splineViewerRef.current.spline || 
+                           splineViewerRef.current._spline || 
+                           splineViewerRef.current.application;
+          
+          if (splineApp) {
+            console.log('SplineBackground: Spline app connected!', splineApp);
+            splineAppRef.current = splineApp;
+            setupScrollHandler();
+            return;
+          }
+          
+          // Try event listener approach
+          splineViewerRef.current.addEventListener('load', (event: any) => {
+            console.log('SplineBackground: Spline loaded via event:', event);
+            if (event.target && (event.target.spline || event.target.application)) {
+              splineAppRef.current = event.target.spline || event.target.application;
+              setupScrollHandler();
+            }
+          });
+        }
+        
+        if (attemptCount < maxAttempts) {
+          setTimeout(checkSplineReady, 500);
         } else {
-          setTimeout(checkSplineReady, 100);
+          console.log('SplineBackground: Max attempts reached, setting up basic scroll handler');
+          setupBasicScrollHandler();
         }
       };
 
@@ -51,53 +94,52 @@ const SplineBackground: React.FC = () => {
     };
 
     const setupScrollHandler = () => {
+      console.log('SplineBackground: Setting up advanced scroll handler...');
       let ticking = false;
 
       const handleScroll = () => {
-        if (!ticking && splineAppRef.current) {
+        if (!ticking) {
           requestAnimationFrame(() => {
             const scrollY = window.scrollY;
             const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
             const scrollProgress = Math.min(scrollY / maxScroll, 1);
             
-            // Update camera position based on scroll
-            try {
-              const camera = splineAppRef.current.findObjectByName('Camera');
-              if (camera) {
-                // Smooth camera movement based on scroll
-                const baseY = 2;
-                const baseZ = 5;
-                const rotationX = scrollProgress * 0.3;
-                const moveZ = scrollProgress * 8;
+            console.log('SplineBackground: Scroll progress:', scrollProgress);
+            
+            if (splineAppRef.current) {
+              try {
+                // Try different methods to find the camera
+                let camera = null;
                 
-                camera.position.y = baseY + (scrollProgress * 3);
-                camera.position.z = baseZ + moveZ;
-                camera.rotation.x = -rotationX;
-              } else {
-                // Alternative: Try to get camera through scene
-                const scene = splineAppRef.current.scene;
-                if (scene && scene.getObjectByName) {
-                  const altCamera = scene.getObjectByName('Camera') || scene.children.find((child: any) => 
+                if (splineAppRef.current.findObjectByName) {
+                  camera = splineAppRef.current.findObjectByName('Camera');
+                }
+                
+                if (!camera && splineAppRef.current.scene) {
+                  camera = splineAppRef.current.scene.getObjectByName?.('Camera');
+                }
+                
+                if (!camera && splineAppRef.current.scene?.children) {
+                  camera = splineAppRef.current.scene.children.find((child: any) => 
                     child.type === 'PerspectiveCamera' || child.type === 'OrthographicCamera'
                   );
-                  if (altCamera) {
-                    altCamera.position.y = 2 + (scrollProgress * 3);
-                    altCamera.position.z = 5 + (scrollProgress * 8);
-                    altCamera.rotation.x = -(scrollProgress * 0.3);
-                  }
                 }
+                
+                if (camera) {
+                  console.log('SplineBackground: Camera found, updating position...');
+                  camera.position.y = 2 + (scrollProgress * 5);
+                  camera.position.z = 5 + (scrollProgress * 10);
+                  camera.rotation.x = -(scrollProgress * 0.5);
+                } else {
+                  console.log('SplineBackground: Camera not found, using viewer transform');
+                  applyViewerTransform(scrollProgress);
+                }
+              } catch (error) {
+                console.error('SplineBackground: Error controlling camera:', error);
+                applyViewerTransform(scrollProgress);
               }
-            } catch (error) {
-              // Fallback: Control the entire spline container
-              if (splineViewerRef.current) {
-                const transform = `
-                  perspective(1000px) 
-                  rotateX(${scrollProgress * 10}deg) 
-                  translateY(${scrollProgress * -50}px)
-                  translateZ(${scrollProgress * 100}px)
-                `;
-                splineViewerRef.current.style.transform = transform;
-              }
+            } else {
+              applyViewerTransform(scrollProgress);
             }
             
             ticking = false;
@@ -107,17 +149,57 @@ const SplineBackground: React.FC = () => {
       };
 
       window.addEventListener('scroll', handleScroll, { passive: true });
-      
-      return () => {
-        window.removeEventListener('scroll', handleScroll);
+      console.log('SplineBackground: Scroll handler attached');
+    };
+
+    const setupBasicScrollHandler = () => {
+      console.log('SplineBackground: Setting up basic scroll handler...');
+      let ticking = false;
+
+      const handleScroll = () => {
+        if (!ticking) {
+          requestAnimationFrame(() => {
+            const scrollY = window.scrollY;
+            const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+            const scrollProgress = Math.min(scrollY / maxScroll, 1);
+            
+            applyViewerTransform(scrollProgress);
+            ticking = false;
+          });
+          ticking = true;
+        }
       };
+
+      window.addEventListener('scroll', handleScroll, { passive: true });
+      console.log('SplineBackground: Basic scroll handler attached');
+    };
+
+    const applyViewerTransform = (scrollProgress: number) => {
+      if (splineViewerRef.current) {
+        const rotationX = scrollProgress * 15;
+        const translateY = scrollProgress * -100;
+        const translateZ = scrollProgress * 200;
+        const scale = 1 + (scrollProgress * 0.2);
+        
+        const transform = `
+          perspective(2000px) 
+          rotateX(${rotationX}deg) 
+          translateY(${translateY}px) 
+          translateZ(${translateZ}px)
+          scale(${scale})
+        `;
+        
+        splineViewerRef.current.style.transform = transform;
+        splineViewerRef.current.style.transformOrigin = 'center center';
+        console.log('SplineBackground: Applied viewer transform:', transform);
+      }
     };
 
     loadSplineScript();
 
     return () => {
-      // Cleanup
       window.removeEventListener('scroll', () => {});
+      console.log('SplineBackground: Cleanup completed');
     };
   }, []);
 
@@ -132,7 +214,8 @@ const SplineBackground: React.FC = () => {
           position: 'fixed',
           top: 0,
           left: 0,
-          zIndex: 0
+          zIndex: 0,
+          transition: 'transform 0.1s ease-out'
         }}
       />
     </div>
