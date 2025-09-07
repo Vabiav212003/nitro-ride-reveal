@@ -150,17 +150,37 @@ All colors MUST be HSL.
 
   /* Spline Background */
   .spline-bg {
-    @apply fixed inset-0 w-full h-full z-0;
+    @apply fixed inset-0 w-full h-full;
+    z-index: -1;
   }
   
   /* Content overlay */
   .content-overlay {
-    @apply relative z-10 min-h-screen;
+    @apply relative min-h-screen;
+    z-index: 1;
   }
   
   /* Section styling */
   .section-racing {
     @apply py-20 px-4 relative;
+    backdrop-filter: blur(1px);
+  }
+
+  /* Enhanced section backgrounds for better readability over Spline */
+  .section-racing:nth-child(odd) {
+    background: linear-gradient(180deg, 
+      hsl(var(--background) / 0.3) 0%, 
+      hsl(var(--background) / 0.7) 50%, 
+      hsl(var(--background) / 0.3) 100%
+    );
+  }
+
+  .section-racing:nth-child(even) {
+    background: linear-gradient(180deg, 
+      hsl(var(--card) / 0.2) 0%, 
+      hsl(var(--card) / 0.6) 50%, 
+      hsl(var(--card) / 0.2) 100%
+    );
   }
   
   /* Gradient text */

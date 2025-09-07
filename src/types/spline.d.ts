@@ -3,6 +3,8 @@ declare namespace JSX {
     'spline-viewer': {
       url?: string;
       style?: React.CSSProperties;
+      ref?: React.Ref<any>;
+      spline?: any;
     };
   }
 }
